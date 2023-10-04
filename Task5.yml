@@ -1,0 +1,149 @@
+- hosts: all
+  connection: httpapi
+  tasks:
+    - name: Get Domain UUID
+      cisco.fmcansible.fmc_configuration:
+        operation: getAllDomain
+        register_as: domain
+
+    - name: Get NGFWBR1 Device Id
+      cisco.fmcansible.fmc_configuration:
+        operation: getAllDevice
+        query_params:
+          filter: "name: NGFWBR1"
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+        register_as: ngfwbr1_id
+
+    - name: Get physical Interface ID's
+      cisco.fmcansible.fmc_configuration:
+        operation: getAllFTDPhysicalInterface
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+          containerUUID: '{{ ngfwbr1_id[0].id }}'
+        register_as: phy_int
+
+    - name: Get Extended Access Lists
+      cisco.fmcansible.fmc_configuration:
+        operation: getAllExtendedAccessListModel
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+        register_as: ext_accLists
+    
+    - name: Get Policy Based Routing
+      cisco.fmcansible.fmc_configuration:
+        operation: getAllPBRPolicyModel
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+          containerUUID: '{{ ngfwbr1_id[0].id }}'
+        register_as: pbr
+
+    - name: Configure Path monitoring for Policy based routing - step1 -for ouside interface
+      cisco.fmcansible.fmc_configuration:
+        operation: updateFTDPhysicalInterface
+        data:
+          type: PhysicalInterface
+          mode: NONE
+          enabled: true
+          pathMonitoring: 
+            enable: true
+            type: AUTO
+          name: TenGigabitEthernet0/1
+          ifname: outside
+          id: '{{ phy_int[2].id }}'
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+          containerUUID: '{{ ngfwbr1_id[0].id }}'
+          objectId: '{{ phy_int[2].id }}'
+
+    - name: Configure Path monitoring for Policy based routing - step1 -for ouside2 interface
+      cisco.fmcansible.fmc_configuration:
+        operation: updateFTDPhysicalInterface
+        data:
+          type: PhysicalInterface
+          mode: NONE
+          enabled: true
+          pathMonitoring: 
+            enable: true
+            type: AUTO
+          name: TenGigabitEthernet0/2
+          ifname: outside2
+          id: '{{ phy_int[3].id }}'
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+          containerUUID: '{{ ngfwbr1_id[0].id }}'
+          objectId: '{{ phy_int[3].id }}'
+
+    - name: Configure webex traffic through minimal packet loss - Step 2
+      cisco.fmcansible.fmc_configuration:
+        operation: updatePBRPolicyModel
+        data:
+          ingressInterfaces:
+          - ifname: inside
+            name: TenGigabitEthernet0/0
+            id: '{{ phy_int[1].id }}'
+            type: PhysicalInterface
+          forwardingActions:
+          - forwardingActionType: "SET_EGRESS_INTF_BY_PRIORITY"
+            matchCriteria:
+              name: DIA_SocialMedia
+              id: '{{ ext_accLists[1].id }}'
+              type: ExtendedAccessList
+            egressInterfaces: 
+            - ifname: outside
+              id: '{{ phy_int[2].id }}'
+              name: TenGigabitEthernet0/1
+              type: PhysicalInterface   
+          - forwardingActionType: SET_EGRESS_INTF_BY_LOST_PKTS
+            matchCriteria: 
+              name: DIA_Collaboration
+              id: '{{ ext_accLists[0].id }}'
+              type: ExtendedAccessList
+            egressInterfaces: 
+            - ifname: outside2
+              name: TenGigabitEthernet0/2
+              id: '{{ phy_int[3].id }}'
+              type: PhysicalInterface
+          id: '{{ pbr[0].id }}'
+          type: PolicyBasedRoutes 
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+          containerUUID: '{{ ngfwbr1_id[0].id }}'
+          objectId: '{{ pbr[0].id }}'
+
+    - name: Get Deployable Device
+      cisco.fmcansible.fmc_configuration:
+        operation: getDeployableDevice
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+        register_as: devicess
+
+    - name: Get Devices
+      cisco.fmcansible.fmc_configuration:
+        operation: getAllDevice
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+        query_params:
+          filter: "name:NGFWBR1" 
+        register_as: device_list 
+
+    - name: Deploy the Device
+      cisco.fmcansible.fmc_configuration:
+        operation: createDeploymentRequest
+        data:
+          type: DeploymentRequest
+          version: '{{ devicess[0].version }}'
+          forceDeploy: false
+          ignoreWarning: true 
+          deviceList: ['{{ device_list[0].id }}']
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+
+
+    
+    
+
+
+
+    
+  

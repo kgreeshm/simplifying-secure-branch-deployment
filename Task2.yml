@@ -1,0 +1,175 @@
+- hosts: all
+  connection: httpapi
+  tasks:
+    - name: Get Domain UUID
+      cisco.fmcansible.fmc_configuration:
+        operation: getAllDomain
+        register_as: domain
+    
+    - name: Get NGFWBR1 Device Id
+      cisco.fmcansible.fmc_configuration:
+        operation: getAllDevice
+        query_params:
+          filter: "name: NGFWBR1"
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+        register_as: ngfwbr1_id
+
+    - name: Get physical Interface ID's
+      cisco.fmcansible.fmc_configuration:
+        operation: getAllFTDPhysicalInterface
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+          containerUUID: '{{ ngfwbr1_id[0].id }}'
+        register_as: phy_int
+
+    - name: Get Extended Access Lists
+      cisco.fmcansible.fmc_configuration:
+        operation: getAllExtendedAccessListModel
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+        register_as: ext_accLists
+
+    - name: Configure extended access list for Youtube - Step2
+      cisco.fmcansible.fmc_configuration:
+        operation: createExtendedAccessListModel
+        data:
+          name: DIA_SocialMedia
+          entries:
+          - logLevel: INFORMATIONAL
+            logging: DEFAULT
+            action: PERMIT
+            logInterval: 300
+            applications:
+              applications:
+              - type: Application
+                name: YouTube
+                id: "929"
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+        register_as: youtube_accList
+
+    - name: Configure extended access list for Webex - Step3
+      cisco.fmcansible.fmc_configuration:
+        operation: createExtendedAccessListModel
+        data:
+          name: DIA_Collaboration
+          entries:
+          - logLevel: INFORMATIONAL
+            logging: DEFAULT
+            action: PERMIT
+            logInterval: 300
+            applications:
+              applications:
+              - type: Application
+                name: WebEx
+                id: "905"
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+        register_as: webex_accList
+
+    - name: Add a wait time of 10 seconds
+      pause:
+        seconds: 10
+
+    - name: Configure Policy based routing for Youtube application - Step 4
+      cisco.fmcansible.fmc_configuration:
+        operation: createMultiplePBRPolicyModel
+        data:
+          id: '{{ ngfwbr1_id[0].id }}'
+          type: PolicyBasedRoutes
+          ingressInterfaces:
+          - ifname: inside
+            id: '{{ phy_int[1].id }}'
+            name: TenGigabitEthernet0/0
+            type: PhysicalInterface
+          forwardingActions:
+          - forwardingActionType: "SET_EGRESS_INTF_BY_PRIORITY"
+            matchCriteria:
+              name: DIA_SocialMedia
+              id: '{{ ext_accLists[1].id }}'
+              type: ExtendedAccessList
+            egressInterfaces: 
+            - ifname: outside
+              id: '{{ phy_int[2].id }}'
+              name: TenGigabitEthernet0/1
+              type: PhysicalInterface   
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+          containerUUID: '{{ ngfwbr1_id[0].id }}'
+        register_as: pbr_conf
+
+    - name: Get Policy Based Routing
+      cisco.fmcansible.fmc_configuration:
+        operation: getAllPBRPolicyModel
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+          containerUUID: '{{ ngfwbr1_id[0].id }}'
+        register_as: pbr
+
+    - name: Configure Policy based routing for Webex application - Step 5
+      cisco.fmcansible.fmc_configuration:
+        operation: updatePBRPolicyModel
+        data:
+          ingressInterfaces:
+          - ifname: inside
+            name: TenGigabitEthernet0/0
+            id: '{{ phy_int[1].id }}'
+            type: PhysicalInterface
+          forwardingActions:
+          - forwardingActionType: "SET_EGRESS_INTF_BY_PRIORITY"
+            matchCriteria:
+              name: DIA_SocialMedia
+              id: '{{ ext_accLists[1].id }}'
+              type: ExtendedAccessList
+            egressInterfaces: 
+            - ifname: outside
+              id: '{{ phy_int[2].id }}'
+              name: TenGigabitEthernet0/1
+              type: PhysicalInterface
+          - forwardingActionType: "SET_EGRESS_INTF_BY_ORDER"
+            matchCriteria: 
+              name: DIA_Collaboration
+              id: '{{ ext_accLists[0].id }}'
+              type: ExtendedAccessList
+            egressInterfaces: 
+            - ifname: outside2
+              name: TenGigabitEthernet0/2
+              id: '{{ phy_int[3].id }}'
+              type: PhysicalInterface
+          id: '{{ pbr[0].id }}'
+          type: PolicyBasedRoutes 
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+          containerUUID: '{{ ngfwbr1_id[0].id }}'
+          objectId: '{{ pbr[0].id }}'
+
+    - name: Get Deployable Device
+      cisco.fmcansible.fmc_configuration:
+        operation: getDeployableDevice
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+        register_as: devicess
+
+    - name: Get Devices
+      cisco.fmcansible.fmc_configuration:
+        operation: getAllDevice
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+        query_params:
+          filter: "name:NGFWBR1" 
+        register_as: device_list 
+
+    - name: Deploy the Device
+      cisco.fmcansible.fmc_configuration:
+        operation: createDeploymentRequest
+        data:
+          type: DeploymentRequest
+          version: '{{ devicess[0].version }}'
+          forceDeploy: false
+          ignoreWarning: true 
+          deviceList: ['{{ device_list[0].id }}']
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+          
+
