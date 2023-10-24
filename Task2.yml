@@ -93,6 +93,10 @@
             - ifname: outside
               id: '{{ phy_int[2].id }}'
               name: TenGigabitEthernet0/1
+              type: PhysicalInterface
+            - ifname: outside2
+              id: '{{ phy_int[3].id }}'
+              name: TenGigabitEthernet0/2
               type: PhysicalInterface   
         path_params:
           domainUUID: '{{ domain[0].uuid }}'
@@ -136,6 +140,10 @@
             - ifname: outside2
               name: TenGigabitEthernet0/2
               id: '{{ phy_int[3].id }}'
+              type: PhysicalInterface
+            - ifname: outside3
+              name: TenGigabitEthernet0/3
+              id: '{{ phy_int[4].id }}'
               type: PhysicalInterface
           id: '{{ pbr[0].id }}'
           type: PolicyBasedRoutes 

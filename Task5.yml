@@ -74,6 +74,24 @@
           containerUUID: '{{ ngfwbr1_id[0].id }}'
           objectId: '{{ phy_int[3].id }}'
 
+    - name: Configure Path monitoring for Policy based routing - step1 -for ouside3 interface
+      cisco.fmcansible.fmc_configuration:
+        operation: updateFTDPhysicalInterface
+        data:
+          type: PhysicalInterface
+          mode: NONE
+          enabled: true
+          pathMonitoring: 
+            enable: true
+            type: AUTO
+          name: TenGigabitEthernet0/3
+          ifname: outside3
+          id: '{{ phy_int[4].id }}'
+        path_params:
+          domainUUID: '{{ domain[0].uuid }}'
+          containerUUID: '{{ ngfwbr1_id[0].id }}'
+          objectId: '{{ phy_int[4].id }}'
+
     - name: Configure webex traffic through minimal packet loss - Step 2
       cisco.fmcansible.fmc_configuration:
         operation: updatePBRPolicyModel
